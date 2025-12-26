@@ -9,6 +9,8 @@ A production-ready serverless text classification API using AWS Lambda, API Gate
 - **S3**: Model artifact storage
 - **DynamoDB**: Asynchronous logging of classifications
 - **scikit-learn**: Pre-trained text classification model
+  <img width="1536" height="1024" alt="ChatGPT Image Dec 26, 2025, 10_34_55 PM" src="https://github.com/user-attachments/assets/1c351346-919c-4e26-8a40-6b0bf177c91b" />
+
 
 ## Folder Structure
 
@@ -31,6 +33,7 @@ text-classification-service/
 ```
 
 ## Setup and Deployment
+
 
 ### 1. Install Dependencies
 
@@ -150,4 +153,4 @@ aws s3 rb s3://$BUCKET_NAME
 
 ## License
 
-MIT
+Apache 2.0
