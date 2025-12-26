@@ -1,0 +1,86 @@
+openapi: 3.0.0
+info:
+  title: Text Classification API
+  version: 1.0.0
+  description: Large-Scale Text Classification Service on AWS Lambda
+  contact:
+    name: API Support
+
+servers:
+  - url: https://{api_id}.execute-api.{region}.amazonaws.com/Prod
+    variables:
+      api_id:
+        default: YOUR_API_ID
+      region:
+        default: us-east-1
+
+paths:
+  /classify:
+    post:
+      summary: Classify input text into predefined categories
+      description: Takes text input and returns predicted category with confidence score
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  minLength: 10
+                  description: Text to classify (minimum 10 characters)
+                  example: "This is a sample text for classification"
+      responses:
+        '200':
+          description: Successful classification
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    description: Unique request ID
+                  category:
+                    type: string
+                    description: Predicted category
+                  confidence:
+                    type: number
+                    format: float
+                    minimum: 0
+                    maximum: 1
+                    description: Confidence score
+                  input_length:
+                    type: integer
+                    description: Length of input text
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                category: "comp.graphics"
+                confidence: 0.95
+                input_length: 42
+        '400':
+          description: Invalid request (missing/invalid text field)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+              example:
+                error: "Text must be at least 10 characters"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+              example:
+                error: "Failed to load model: S3 access denied"

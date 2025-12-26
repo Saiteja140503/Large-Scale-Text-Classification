@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Large-Scale Text Classification Service on AWS Lambda
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+
+Parameters:
+  ModelBucketName:
+    Type: String
+    Default: text-classifier-model-bucket
+    Description: S3 bucket where model artifact is stored
+
+Resources:
+  TextClassifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: lambda_handler.handler
+      Events:
+        ClassifyAPI:
+          Type: Api
+          Properties:
+            Path: /classify
+            Method: post
+            RestApiId: !Ref TextClassificationAPI
+      Environment:
+        Variables:
+          MODEL_BUCKET: !Ref ModelBucketName
+          MODEL_KEY: model/text_classifier.pkl
+          LOG_TABLE_NAME: !Ref ClassificationLogsTable
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref ModelBucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ClassificationLogsTable
+
+  TextClassificationAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      TracingEnabled: true
+
+  ClassificationLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+Outputs:
+  TextClassificationAPI:
+    Description: API Gateway endpoint
+    Value: !Sub 'https://${TextClassificationAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod/classify'
+  DynamoDBTable:
+    Description: DynamoDB table for classification logs
+    Value: !Ref ClassificationLogsTable
+  LambdaFunction:
+    Description: Lambda function ARN
+    Value: !GetAtt TextClassifierFunction.Arn

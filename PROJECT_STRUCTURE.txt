@@ -1,0 +1,174 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║  LARGE-SCALE TEXT CLASSIFICATION SERVICE ON AWS LAMBDA - PROJECT STRUCTURE       ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+text-classification-service/
+│
+├─ Core AWS Infrastructure
+│  ├─ template.yaml                  ✓ AWS SAM template (CloudFormation)
+│  │  └─ Resources:
+│  │     ├─ AWS Lambda function
+│  │     ├─ API Gateway (POST /classify endpoint)
+│  │     └─ DynamoDB table for logging
+│
+├─ Lambda Function Code
+│  └─ src/
+│     ├─ lambda_handler.py           ✓ Main handler for classification requests
+│     │  ├─ Request validation (JSON, text field, min 10 chars)
+│     │  ├─ Model loading from S3
+│     │  ├─ Text classification inference
+│     │  ├─ Asynchronous DynamoDB logging
+│     │  ├─ Error handling (400, 500 responses)
+│     │  └─ Response: {id, category, confidence, input_length}
+│     │
+│     ├─ model_loader.py             ✓ S3 model caching utility
+│     │  ├─ Global model cache (avoids re-downloads)
+│     │  ├─ Pickle deserialization
+│     │  └─ S3 client integration
+│     │
+│     └─ logger.py                   ✓ DynamoDB logging helper
+│        ├─ Fire-and-forget pattern
+│        └─ Non-blocking writes
+│
+├─ Machine Learning
+│  ├─ scripts/
+│  │  └─ train_model.py              ✓ Model training script
+│  │     ├─ Dataset: 20newsgroups
+│  │     ├─ Pipeline: TfidfVectorizer + LogisticRegression
+│  │     ├─ Categories: comp.graphics, sci.med, rec.sport.baseball, talk.politics
+│  │     └─ Output: model/text_classifier.pkl
+│  │
+│  └─ model/
+│     └─ text_classifier.pkl         (Generated after training)
+│
+├─ Testing & Validation
+│  └─ tests/
+│     └─ test_handler.py             ✓ Unit tests
+│        ├─ test_bad_request_missing_text
+│        ├─ test_bad_request_short_text
+│        └─ test_server_error
+│
+├─ Configuration & Dependencies
+│  ├─ requirements.txt                ✓ Python dependencies
+│  │  ├─ boto3 (AWS SDK)
+│  │  ├─ scikit-learn (ML)
+│  │  └─ joblib
+│  │
+│  └─ .gitignore                      ✓ Git ignore rules
+│
+├─ Documentation
+│  ├─ README.md                       ✓ Project overview
+│  │  ├─ Architecture description
+│  │  ├─ Setup instructions
+│  │  ├─ API usage examples
+│  │  ├─ Features list
+│  │  └─ Monitoring/cleanup
+│  │
+│  ├─ DEPLOYMENT_GUIDE.md             ✓ Step-by-step deployment
+│  │  ├─ Prerequisites
+│  │  ├─ SAM build & deploy
+│  │  ├─ Testing instructions
+│  │  ├─ Troubleshooting
+│  │  └─ Cost estimation
+│  │
+│  ├─ swagger.yaml                    ✓ OpenAPI 3.0 specification
+│  │  ├─ Endpoint: POST /classify
+│  │  ├─ Request schema with validation
+│  │  ├─ Response schemas (200, 400, 500)
+│  │  └─ Example requests/responses
+│  │
+│  └─ CURL_EXAMPLES.sh                ✓ Sample API test requests
+│     ├─ Valid classification (graphics, medical, sports)
+│     ├─ Invalid requests (missing text, too short, malformed JSON)
+│     └─ Expected response format
+│
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                              KEY FEATURES                                       ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+✅ Request Validation
+   - Validates JSON format
+   - Requires 'text' field (non-empty string)
+   - Minimum 10 characters requirement
+   - Returns 400 Bad Request with clear error messages
+
+✅ ML Inference
+   - Loads scikit-learn model from S3
+   - Caches model in Lambda global memory (warm invocations)
+   - Performs text classification
+   - Returns prediction category + confidence score
+   - Unique request ID (UUID) for tracking
+
+✅ Async Logging
+   - Logs classification results to DynamoDB
+   - Fire-and-forget pattern (non-blocking)
+   - Includes: timestamp, text, category, confidence, request_id
+   - Does not fail request if logging fails
+
+✅ Error Handling
+   - Invalid JSON: 400 Bad Request
+   - Missing/invalid text: 400 Bad Request
+   - Model loading failure: 500 Internal Server Error
+   - Inference failure: 500 Internal Server Error
+   - Logging errors: Non-blocking, logged to CloudWatch
+
+✅ Serverless Architecture
+   - Zero-idle costs (pay per request)
+   - Auto-scaling (1000s concurrent invocations)
+   - 30-second timeout, 1024 MB memory
+   - CloudWatch logs for monitoring
+
+✅ Production-Ready
+   - Comprehensive error handling
+   - Input validation
+   - Structured logging
+   - OpenAPI documentation
+   - Sample curl commands
+   - Deployment guide with troubleshooting
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                          DEPLOYMENT QUICK START                                 ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+1. Train model:
+   $ cd scripts && python train_model.py && cd ..
+
+2. Create S3 bucket & upload model:
+   $ BUCKET_NAME="text-classifier-model-$(date +%s)"
+   $ aws s3 mb s3://$BUCKET_NAME
+   $ aws s3 cp model/text_classifier.pkl s3://$BUCKET_NAME/model/text_classifier.pkl
+
+3. Deploy with SAM:
+   $ sam build
+   $ sam deploy --guided --parameter-overrides ModelBucketName=$BUCKET_NAME
+
+4. Test API:
+   $ curl -X POST "https://YOUR_API_ID.execute-api.REGION.amazonaws.com/Prod/classify" \\
+     -H "Content-Type: application/json" \\
+     -d '{"text": "Sample text for classification with enough content"}'
+
+5. Monitor:
+   $ aws logs tail /aws/lambda/TextClassifierFunction --follow
+
+6. Cleanup:
+   $ sam delete
+   $ aws s3 rm s3://$BUCKET_NAME --recursive && aws s3 rb s3://$BUCKET_NAME
+
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                           API RESPONSE FORMAT                                   ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+SUCCESS (200):
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "category": "comp.graphics",
+  "confidence": 0.9234,
+  "input_length": 115
+}
+
+ERROR (400):
+{"error": "Text must be at least 10 characters"}
+
+ERROR (500):
+{"error": "Failed to load model: S3 access denied"}
+
