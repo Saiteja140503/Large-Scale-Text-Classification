@@ -1,0 +1,196 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                    AWS DEPLOYMENT - QUICK START (10 MINUTES)                    ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+📋 CHECKLIST BEFORE STARTING:
+
+[ ] AWS Account created (https://aws.amazon.com/)
+[ ] AWS CLI installed: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+[ ] AWS SAM installed: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html
+[ ] Python 3.9+ installed
+[ ] AWS credentials configured: run `aws configure` and enter your Access Key & Secret Key
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP-BY-STEP DEPLOYMENT (Copy-Paste Commands)
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+STEP 1: Download & Setup (2 min)
+────────────────────────────────────────────────────────────────────────────────
+
+1. Download project from Colab (file browser → right-click folder → Download)
+
+2. Extract ZIP and navigate:
+   cd text-classification-service
+
+3. Install dependencies:
+   pip install -r requirements.txt
+   pip install aws-sam-cli
+
+
+STEP 2: Train Model (10 min)
+────────────────────────────────────────────────────────────────────────────────
+
+cd scripts
+python train_model.py
+cd ..
+
+→ Should see: "Model saved successfully! Model size: XXXX KB"
+
+
+STEP 3: Create S3 Bucket (2 min)
+────────────────────────────────────────────────────────────────────────────────
+
+# Run this exactly:
+BUCKET_NAME="text-classifier-model-$(date +%s)"
+echo "Save this bucket name: $BUCKET_NAME"
+
+# Create bucket:
+aws s3 mb s3://$BUCKET_NAME --region us-east-1
+
+# Upload model:
+aws s3 cp model/text_classifier.pkl s3://$BUCKET_NAME/model/text_classifier.pkl
+
+# Verify:
+aws s3 ls s3://$BUCKET_NAME/model/
+
+→ Should show: text_classifier.pkl
+
+
+STEP 4: Deploy to AWS (5 min)
+────────────────────────────────────────────────────────────────────────────────
+
+# Build:
+sam build
+
+# Deploy:
+sam deploy --guided \
+  --parameter-overrides ModelBucketName=$BUCKET_NAME \
+  --region us-east-1
+
+When asked:
+  Stack Name: text-classification-service (just press Enter for default)
+  Confirm changes: y
+  Allow SAM IAM role creation: Y
+  Authorization: y
+  Save parameters: Y
+
+⏳ Wait 3-5 minutes for deployment...
+
+→ At the end, look for:
+  "Successfully created/updated stack - text-classification-service"
+
+
+STEP 5: Get API Endpoint (1 min)
+────────────────────────────────────────────────────────────────────────────────
+
+aws cloudformation describe-stacks \
+  --stack-name text-classification-service \
+  --query 'Stacks[0].Outputs[0].OutputValue' \
+  --region us-east-1
+
+→ Copy the URL (looks like: https://abc123.execute-api.us-east-1.amazonaws.com/Prod/classify)
+
+Save it:
+API_URL="https://YOUR_URL_HERE"
+
+
+STEP 6: Test Your API (2 min)
+────────────────────────────────────────────────────────────────────────────────
+
+# Test 1: Valid request (should return 200 with category)
+curl -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "This is a baseball game that was amazing and everyone cheered for hours"}'
+
+# Test 2: Too short (should return 400 error)
+curl -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "short"}'
+
+# Test 3: Missing text (should return 400 error)
+curl -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+📊 EXPECTED RESPONSES
+
+SUCCESS (HTTP 200):
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "category": "rec.sport.baseball",
+  "confidence": 0.8234,
+  "input_length": 84
+}
+
+ERROR (HTTP 400):
+{"error": "Text must be at least 10 characters"}
+
+CATEGORIES:
+- comp.graphics
+- sci.med
+- rec.sport.baseball
+- talk.politics.mideast
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+🔍 MONITORING YOUR DEPLOYMENT
+
+# View logs:
+aws logs tail /aws/lambda/TextClassifierFunction --follow --region us-east-1
+
+# View stored classifications:
+aws dynamodb scan --table-name ClassificationLogsTable --region us-east-1
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+💰 COST
+
+Free Tier: First 1,000,000 Lambda invocations/month (12 months)
+After: ~$1/month for 10,000 requests
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+🗑️ CLEANUP (Delete Everything)
+
+Delete CloudFormation stack:
+sam delete --region us-east-1
+
+Delete S3 bucket:
+aws s3 rm s3://$BUCKET_NAME --recursive --region us-east-1
+aws s3 rb s3://$BUCKET_NAME --region us-east-1
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+❌ COMMON ISSUES
+
+1. AWS CLI not found
+   → Install from: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+
+2. "AWS credentials not found"
+   → Run: aws configure
+   → Enter your Access Key ID and Secret Access Key
+
+3. "Model not found" error
+   → Verify bucket name: echo $BUCKET_NAME
+   → Check model uploaded: aws s3 ls s3://$BUCKET_NAME/model/
+
+4. "502 Bad Gateway"
+   → Check logs: aws logs tail /aws/lambda/TextClassifierFunction
+   → Usually means Lambda crashed - check the error in logs
+
+5. "Access Denied" to S3
+   → SAM automatically grants Lambda S3 read access
+   → If issue persists, manually check IAM role permissions
+
+═══════════════════════════════════════════════════════════════════════════════════
+
+📚 DOCUMENTATION
+
+- Full deployment guide: See AWS_DEPLOYMENT_STEPS.md (in /content/)
+- Project README: See text-classification-service/README.md
+- API docs: See text-classification-service/swagger.yaml
+
